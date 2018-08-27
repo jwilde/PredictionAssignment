@@ -1,7 +1,7 @@
 ---
 title: "Prediction Assignment - Predicting the manner of doing an exercise"
-author: "jwilde"
-date: "20 August 2018"
+author: "jw"
+date: "27 August 2018"
 output: html_document
 ---
 
@@ -11,6 +11,153 @@ knitr::opts_chunk$set(echo = TRUE)
 
 ## Summary
 
-One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, the goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants to predict the manner in which the participants did the exercise. The data for this project come from the source http://groupware.les.inf.puc-rio.br/har. 
+One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, the goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants to predict the manner in which the participants did barbell lifts. The participants were asked to do the exercise correctly and incorrectly in 5 different ways. The data for this project come from the source 
+http://groupware.les.inf.puc-rio.br/public/papers/2013.Velloso.QAR-WLE.pdf.
 
-It is described how the model was built, how cross validation was used, what the expected out of sample error is and why the choices were made in this kind of way.
+In this document it is described how the prediction model was built, how cross validation was used, what the expected out of sample error is and why the choices were made in this kind of way.
+
+## Exploratory Analysis
+
+```{r}
+training<-read.csv("pml-training.csv")
+```
+
+The training data set consists of $19622$ observations in $159$ parameters and one outcome 'classe'. There are $5$ possible outcomes:
+
+|outcome classe |meaning                                 |
+|---------------|----------------------------------------|
+|A              |exactly according to the specification  |
+|B              |throwing the elbows to the front        |
+|C              |lifting the dumbbell only halfway       |
+|D              |lowering the dumbbell only halfway      |
+|E              |throwing the hips to the front          |
+
+We will split our training data into training and validation set, so we can built a couple of models on base of the training set and select the final model as the model which performs the best on the validation data.
+
+```{r, message=FALSE, warning=FALSE}
+library(caret)
+```
+
+```{r}
+inTrain <- createDataPartition(y=training$classe, p=0.75, list=FALSE)
+train <- training[inTrain,]
+validation<-training[-inTrain,]
+```
+
+## Preprocessing
+
+the first $7$ columns are removed, as they contain information which shall not be taken into account as a parameter for prediction, e.g. index, timestamp and user name.
+Also we remove all columns with NA values and columns which are empty for the majority of entries.
+
+```{r}
+set.seed(1234)
+train<-train[,-c(1:7, 12:36,50:59, 69:83, 87:101, 103:112, 125:150)]
+validate<-validation[,-c(1:7, 12:36,50:59, 69:83, 87:101, 103:112, 125:150)]
+```
+
+The result is a set with $52$ instead of $160$ columns.
+
+## Model selection
+
+As this is a classification problem with more than $2$ classes, this analysis compares the following algorithms:  
+  * k nearest neighbor  
+  * decision tree  
+  * random forest.  
+
+### K-nearest neighbor
+
+We build a k-nearest neighbor model to predict the classe variable and use 10-fold cross validation to estimate the out of sample error rate.
+```{r, message=FALSE}
+library(class)
+```
+
+```{r}
+set.seed(8901)
+predKnn<-knn(train[,-52], validate[,-52],train$classe, k=3)
+confusionMatrix(predKnn,validate$classe)
+```
+
+Actually K-nearest neighbor is fast and classifies pretty good with an accuracy of $94$%.
+
+We estimate the out of sample error using 10-fold cross validation.
+
+```{r, message=FALSE}
+library(plyr)
+```
+
+```{r}
+set.seed(8901)
+folds<-split(train, cut(sample(1:nrow(train)),10))
+errs <- rep(NA, length(folds))
+for (i in 1:length(folds)) {
+ testFolds <- ldply(folds[i], data.frame)[,-1]
+ trainFolds <- ldply(folds[-i], data.frame)[-1]
+ tmp.predict<-predKnn<-knn(trainFolds[,-52], testFolds[,-52],trainFolds$classe, k=3)
+ conf.mat <- table(testFolds$classe, tmp.predict)
+ errs[i] <- 1-sum(diag(conf.mat))/sum(conf.mat)
+}
+mean(errs)
+```
+
+Cross validation results in an estimated out of sample error of $7$%.
+
+### Decision tree
+We build a decision tree to predict the classe variable and use 10-fold cross validation to estimate the out of sample error rate.
+
+```{r, message=FALSE}
+library(rpart)
+library(plyr)
+```
+
+```{r}
+set.seed(3456)
+modelDT<-rpart(classe~., train, method="class")
+predDT<-predict(modelDT, newdata=validation, type="class")
+confusionMatrix(predDT,validation$classe)
+
+folds<-split(train, cut(sample(1:nrow(train)),10))
+errs <- rep(NA, length(folds))
+for (i in 1:length(folds)) {
+ testFolds <- ldply(folds[i], data.frame)[,-1]
+ trainFolds <- ldply(folds[-i], data.frame)[-1]
+ tmp.model <- rpart(classe~. , trainFolds, method = "class")
+ tmp.predict <- predict(tmp.model, newdata = testFolds, type = "class")
+ conf.mat <- table(testFolds$classe, tmp.predict)
+ errs[i] <- 1-sum(diag(conf.mat))/sum(conf.mat)
+}
+mean(errs)
+```
+
+In the examples run the result had an accurary of about $75$%. Cross validation resulted in an estimate for the out of sample error of about $26$%.
+
+### Random forest
+
+Here we try a random forest. For random forest there is no need to estimate the out of sample error via cross validation (see [1]).
+
+```{r, message=FALSE}
+library(randomForest)
+```
+
+```{r}
+set.seed(1002)
+modelRF = randomForest(classe~., data=train, ntree = 500)
+modelRF
+```
+
+The estimated error rate is $0.5$%. This is very good.
+
+Predicting the classes of the entries of our validation set results in:
+```{r}
+set.seed(1002)
+predRF = predict(modelRF, newdata=validation)
+confusionMatrix(predRF, validation$classe)
+```
+
+So we predicted with an accuracy of more than $99$%. This is awesome.
+
+### Result
+
+The random forest is the model which performs best on the validation set. So this is the final model. But also k-nearest neighbors would be a good choice, as the estimated out of sample error is low and the algorithm runs much faster than random forest.
+
+## References
+[1] https://www.stat.berkeley.edu/~breiman/RandomForests/cc_home.htm#ooberr

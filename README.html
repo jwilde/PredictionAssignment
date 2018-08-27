@@ -9,9 +9,9 @@
 <meta name="generator" content="pandoc" />
 
 
-<meta name="author" content="jwilde" />
+<meta name="author" content="jw" />
 
-<meta name="date" content="2018-08-20" />
+<meta name="date" content="2018-08-27" />
 
 <title>Prediction Assignment - Predicting the manner of doing an exercise</title>
 
@@ -120,16 +120,249 @@ $(document).ready(function () {
 
 
 <h1 class="title toc-ignore">Prediction Assignment - Predicting the manner of doing an exercise</h1>
-<h4 class="author"><em>jwilde</em></h4>
-<h4 class="date"><em>20 August 2018</em></h4>
+<h4 class="author"><em>jw</em></h4>
+<h4 class="date"><em>27 August 2018</em></h4>
 
 </div>
 
 
 <div id="summary" class="section level2">
 <h2>Summary</h2>
-<p>One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, the goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants to predict the manner in which the participants did the exercise. The data for this project come from the source <a href="http://groupware.les.inf.puc-rio.br/har" class="uri">http://groupware.les.inf.puc-rio.br/har</a>.</p>
-<p>It is described how the model was built, how cross validation was used, what the expected out of sample error is and why the choices were made in this kind of way.</p>
+<p>One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, the goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants to predict the manner in which the participants did barbell lifts. The participants were asked to do the exercise correctly and incorrectly in 5 different ways. The data for this project come from the source <a href="http://groupware.les.inf.puc-rio.br/public/papers/2013.Velloso.QAR-WLE.pdf" class="uri">http://groupware.les.inf.puc-rio.br/public/papers/2013.Velloso.QAR-WLE.pdf</a>.</p>
+<p>In this document it is described how the prediction model was built, how cross validation was used, what the expected out of sample error is and why the choices were made in this kind of way.</p>
+</div>
+<div id="exploratory-analysis" class="section level2">
+<h2>Exploratory Analysis</h2>
+<pre class="r"><code>training&lt;-read.csv(&quot;pml-training.csv&quot;)</code></pre>
+<p>The training data set consists of <span class="math inline">\(19622\)</span> observations in <span class="math inline">\(159\)</span> parameters and one outcome ‘classe’. There are <span class="math inline">\(5\)</span> possible outcomes:</p>
+<table>
+<thead>
+<tr class="header">
+<th>outcome classe</th>
+<th>meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>A</td>
+<td>exactly according to the specification</td>
+</tr>
+<tr class="even">
+<td>B</td>
+<td>throwing the elbows to the front</td>
+</tr>
+<tr class="odd">
+<td>C</td>
+<td>lifting the dumbbell only halfway</td>
+</tr>
+<tr class="even">
+<td>D</td>
+<td>lowering the dumbbell only halfway</td>
+</tr>
+<tr class="odd">
+<td>E</td>
+<td>throwing the hips to the front</td>
+</tr>
+</tbody>
+</table>
+<p>We will split our training data into training and validation set, so we can built a couple of models on base of the training set and select the final model as the model which performs the best on the validation data.</p>
+<pre class="r"><code>library(caret)</code></pre>
+<pre class="r"><code>inTrain &lt;- createDataPartition(y=training$classe, p=0.75, list=FALSE)
+train &lt;- training[inTrain,]
+validation&lt;-training[-inTrain,]</code></pre>
+</div>
+<div id="preprocessing" class="section level2">
+<h2>Preprocessing</h2>
+<p>the first <span class="math inline">\(7\)</span> columns are removed, as they contain information which shall not be taken into account as a parameter for prediction, e.g. index, timestamp and user name. Also we remove all columns with NA values and columns which are empty for the majority of entries.</p>
+<pre class="r"><code>set.seed(1234)
+train&lt;-train[,-c(1:7, 12:36,50:59, 69:83, 87:101, 103:112, 125:150)]
+validate&lt;-validation[,-c(1:7, 12:36,50:59, 69:83, 87:101, 103:112, 125:150)]</code></pre>
+<p>The result is a set with <span class="math inline">\(52\)</span> instead of <span class="math inline">\(160\)</span> columns.</p>
+</div>
+<div id="model-selection" class="section level2">
+<h2>Model selection</h2>
+<p>As this is a classification problem with more than <span class="math inline">\(2\)</span> classes, this analysis compares the following algorithms:<br />
+* k nearest neighbor<br />
+* decision tree<br />
+* random forest.</p>
+<div id="k-nearest-neighbor" class="section level3">
+<h3>K-nearest neighbor</h3>
+<p>We build a k-nearest neighbor model to predict the classe variable and use 10-fold cross validation to estimate the out of sample error rate.</p>
+<pre class="r"><code>library(class)</code></pre>
+<pre class="r"><code>set.seed(8901)
+predKnn&lt;-knn(train[,-52], validate[,-52],train$classe, k=3)
+confusionMatrix(predKnn,validate$classe)</code></pre>
+<pre><code>## Confusion Matrix and Statistics
+## 
+##           Reference
+## Prediction    A    B    C    D    E
+##          A 1357   22   11   11    8
+##          B   11  876   17    2   11
+##          C    5   23  794   35   10
+##          D   18   10   25  748   15
+##          E    4   18    8    8  857
+## 
+## Overall Statistics
+##                                           
+##                Accuracy : 0.9445          
+##                  95% CI : (0.9378, 0.9508)
+##     No Information Rate : 0.2845          
+##     P-Value [Acc &gt; NIR] : &lt; 2e-16         
+##                                           
+##                   Kappa : 0.9298          
+##  Mcnemar's Test P-Value : 0.02193         
+## 
+## Statistics by Class:
+## 
+##                      Class: A Class: B Class: C Class: D Class: E
+## Sensitivity            0.9728   0.9231   0.9287   0.9303   0.9512
+## Specificity            0.9852   0.9896   0.9820   0.9834   0.9905
+## Pos Pred Value         0.9631   0.9553   0.9158   0.9167   0.9575
+## Neg Pred Value         0.9891   0.9817   0.9849   0.9863   0.9890
+## Prevalence             0.2845   0.1935   0.1743   0.1639   0.1837
+## Detection Rate         0.2767   0.1786   0.1619   0.1525   0.1748
+## Detection Prevalence   0.2873   0.1870   0.1768   0.1664   0.1825
+## Balanced Accuracy      0.9790   0.9564   0.9553   0.9569   0.9708</code></pre>
+<p>Actually K-nearest neighbor is fast and classifies pretty good with an accuracy of <span class="math inline">\(94\)</span>%.</p>
+<p>We estimate the out of sample error using 10-fold cross validation.</p>
+<pre class="r"><code>library(plyr)</code></pre>
+<pre class="r"><code>set.seed(8901)
+folds&lt;-split(train, cut(sample(1:nrow(train)),10))
+errs &lt;- rep(NA, length(folds))
+for (i in 1:length(folds)) {
+ testFolds &lt;- ldply(folds[i], data.frame)[,-1]
+ trainFolds &lt;- ldply(folds[-i], data.frame)[-1]
+ tmp.predict&lt;-predKnn&lt;-knn(trainFolds[,-52], testFolds[,-52],trainFolds$classe, k=3)
+ conf.mat &lt;- table(testFolds$classe, tmp.predict)
+ errs[i] &lt;- 1-sum(diag(conf.mat))/sum(conf.mat)
+}
+mean(errs)</code></pre>
+<pre><code>## [1] 0.06964225</code></pre>
+<p>Cross validation results in an estimated out of sample error of <span class="math inline">\(7\)</span>%.</p>
+</div>
+<div id="decision-tree" class="section level3">
+<h3>Decision tree</h3>
+<p>We build a decision tree to predict the classe variable and use 10-fold cross validation to estimate the out of sample error rate.</p>
+<pre class="r"><code>library(rpart)
+library(plyr)</code></pre>
+<pre class="r"><code>set.seed(3456)
+modelDT&lt;-rpart(classe~., train, method=&quot;class&quot;)
+predDT&lt;-predict(modelDT, newdata=validation, type=&quot;class&quot;)
+confusionMatrix(predDT,validation$classe)</code></pre>
+<pre><code>## Confusion Matrix and Statistics
+## 
+##           Reference
+## Prediction    A    B    C    D    E
+##          A 1296  133   21   31    7
+##          B   40  496   44   65   55
+##          C   32  192  728  106  118
+##          D   16   50   58  534   66
+##          E   11   78    4   68  655
+## 
+## Overall Statistics
+##                                           
+##                Accuracy : 0.7563          
+##                  95% CI : (0.7441, 0.7683)
+##     No Information Rate : 0.2845          
+##     P-Value [Acc &gt; NIR] : &lt; 2.2e-16       
+##                                           
+##                   Kappa : 0.6913          
+##  Mcnemar's Test P-Value : &lt; 2.2e-16       
+## 
+## Statistics by Class:
+## 
+##                      Class: A Class: B Class: C Class: D Class: E
+## Sensitivity            0.9290   0.5227   0.8515   0.6642   0.7270
+## Specificity            0.9453   0.9484   0.8894   0.9537   0.9598
+## Pos Pred Value         0.8710   0.7086   0.6190   0.7376   0.8027
+## Neg Pred Value         0.9710   0.8922   0.9659   0.9354   0.9398
+## Prevalence             0.2845   0.1935   0.1743   0.1639   0.1837
+## Detection Rate         0.2643   0.1011   0.1485   0.1089   0.1336
+## Detection Prevalence   0.3034   0.1427   0.2398   0.1476   0.1664
+## Balanced Accuracy      0.9372   0.7355   0.8704   0.8089   0.8434</code></pre>
+<pre class="r"><code>folds&lt;-split(train, cut(sample(1:nrow(train)),10))
+errs &lt;- rep(NA, length(folds))
+for (i in 1:length(folds)) {
+ testFolds &lt;- ldply(folds[i], data.frame)[,-1]
+ trainFolds &lt;- ldply(folds[-i], data.frame)[-1]
+ tmp.model &lt;- rpart(classe~. , trainFolds, method = &quot;class&quot;)
+ tmp.predict &lt;- predict(tmp.model, newdata = testFolds, type = &quot;class&quot;)
+ conf.mat &lt;- table(testFolds$classe, tmp.predict)
+ errs[i] &lt;- 1-sum(diag(conf.mat))/sum(conf.mat)
+}
+mean(errs)</code></pre>
+<pre><code>## [1] 0.2644358</code></pre>
+<p>In the examples run the result had an accurary of about <span class="math inline">\(75\)</span>%. Cross validation resulted in an estimate for the out of sample error of about <span class="math inline">\(26\)</span>%.</p>
+</div>
+<div id="random-forest" class="section level3">
+<h3>Random forest</h3>
+<p>Here we try a random forest. For random forest there is no need to estimate the out of sample error via cross validation (see [1]).</p>
+<pre class="r"><code>library(randomForest)</code></pre>
+<pre><code>## Warning: package 'randomForest' was built under R version 3.5.1</code></pre>
+<pre class="r"><code>set.seed(1002)
+modelRF = randomForest(classe~., data=train, ntree = 500)
+modelRF</code></pre>
+<pre><code>## 
+## Call:
+##  randomForest(formula = classe ~ ., data = train, ntree = 500) 
+##                Type of random forest: classification
+##                      Number of trees: 500
+## No. of variables tried at each split: 7
+## 
+##         OOB estimate of  error rate: 0.52%
+## Confusion matrix:
+##      A    B    C    D    E  class.error
+## A 4182    2    0    0    1 0.0007168459
+## B   16 2825    7    0    0 0.0080758427
+## C    0   12 2552    3    0 0.0058433970
+## D    0    0   24 2386    2 0.0107794362
+## E    0    0    3    6 2697 0.0033259424</code></pre>
+<p>The estimated error rate is <span class="math inline">\(0.5\)</span>%. This is very good.</p>
+<p>Predicting the classes of the entries of our validation set results in:</p>
+<pre class="r"><code>set.seed(1002)
+predRF = predict(modelRF, newdata=validation)
+confusionMatrix(predRF, validation$classe)</code></pre>
+<pre><code>## Confusion Matrix and Statistics
+## 
+##           Reference
+## Prediction    A    B    C    D    E
+##          A 1395    4    0    0    0
+##          B    0  944    4    0    0
+##          C    0    1  851    5    2
+##          D    0    0    0  799    0
+##          E    0    0    0    0  899
+## 
+## Overall Statistics
+##                                           
+##                Accuracy : 0.9967          
+##                  95% CI : (0.9947, 0.9981)
+##     No Information Rate : 0.2845          
+##     P-Value [Acc &gt; NIR] : &lt; 2.2e-16       
+##                                           
+##                   Kappa : 0.9959          
+##  Mcnemar's Test P-Value : NA              
+## 
+## Statistics by Class:
+## 
+##                      Class: A Class: B Class: C Class: D Class: E
+## Sensitivity            1.0000   0.9947   0.9953   0.9938   0.9978
+## Specificity            0.9989   0.9990   0.9980   1.0000   1.0000
+## Pos Pred Value         0.9971   0.9958   0.9907   1.0000   1.0000
+## Neg Pred Value         1.0000   0.9987   0.9990   0.9988   0.9995
+## Prevalence             0.2845   0.1935   0.1743   0.1639   0.1837
+## Detection Rate         0.2845   0.1925   0.1735   0.1629   0.1833
+## Detection Prevalence   0.2853   0.1933   0.1752   0.1629   0.1833
+## Balanced Accuracy      0.9994   0.9969   0.9967   0.9969   0.9989</code></pre>
+<p>So we predicted with an accuracy of more than <span class="math inline">\(99\)</span>%. This is awesome.</p>
+</div>
+<div id="result" class="section level3">
+<h3>Result</h3>
+<p>The random forest is the model which performs best on the validation set. So this is the final model. But also k-nearest neighbors would be a good choice, as the estimated out of sample error is low and the algorithm runs much faster than random forest.</p>
+</div>
+</div>
+<div id="references" class="section level2">
+<h2>References</h2>
+<p>[1] <a href="https://www.stat.berkeley.edu/~breiman/RandomForests/cc_home.htm#ooberr" class="uri">https://www.stat.berkeley.edu/~breiman/RandomForests/cc_home.htm#ooberr</a></p>
 </div>
 
 
